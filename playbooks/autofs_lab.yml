@@ -1,0 +1,87 @@
+---
+- name: Configure servers for autofs lab
+  hosts: all
+  tasks:
+    - name: Create directories for mounts on ipa
+      file: 
+        path="{{ item }}" 
+        state=directory 
+        mode=777 
+        owner=root 
+        group=root
+      with_items: 
+        - "/business_shares/direct/external"
+        - "/business_shares/indirect/north"
+        - "/business_shares/indirect/south"
+        - "/business_shares/indirect/middle"
+      become: yes
+      when: "'ipa' in inventory_hostname"
+      tags: begin
+
+    - name: copy /etc/exports into place on ipa
+      template: 
+        src="{{ playbook_dir }}/../templates/exports.j2" 
+        dest=/etc/exports 
+        owner=root 
+        group=root
+      become: yes
+      when: "'ipa' in inventory_hostname"
+      tags: begin
+
+    - name: install NFS
+      yum:
+        name: nfs-utils
+        state: latest
+      become: yes
+      tags: begin
+ 
+    - name: Enable and start the nfs service on ipa
+      service:
+        name: nfs-server
+        state: started
+        enabled: yes
+      become: yes
+      when: "'ipa' in inventory_hostname"
+      tags: begin
+
+    - name: Enable nfs service in the firewall on ipa
+      firewalld:
+        service: nfs
+        permanent: yes
+        state: enabled
+      become: yes
+      when: "'ipa' in inventory_hostname"
+      tags: begin
+
+    - name: restart the firewalld service to register the change
+      service:
+        name: firewalld
+        state: restarted
+      become: yes
+      when: "'ipa' in inventory_hostname"
+      tags: begin
+      
+    - name: Create the needed groups
+      include: "{{ playbook_dir }}/../roles/autofs_groups.yml"
+      become: yes
+      
+    - name: Set consultant share permissions
+      file: 
+        path: /business_shares/direct/external
+        group: consultants
+        mode: '2764'
+        recurse: yes  
+      when: "'ipa' in inventory_hostname"
+      become: yes
+      tags: begin
+
+    - name: Set ops share permissions
+      file: 
+        path: /business_shares/indirect
+        group: ops
+        mode: '2764'
+        recurse: yes  
+      when: "'ipa' in inventory_hostname"
+      become: yes
+      tags: begin
+      
